@@ -6,9 +6,6 @@
 
 #include <Arduino.h>
 
-#include <Adafruit_NeoPixel.h>
-Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
-
 void print(const __FlashStringHelper *ifsh) {
   #ifdef DEBUG_PRINT
   Serial.print(ifsh);
@@ -21,84 +18,21 @@ void println(const __FlashStringHelper *ifsh) {
   #endif
 }
 
-bool sensor_enabled = false;
+#include <Adafruit_NeoPixel.h>
+Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 #include <Wire.h>
 #include <SparkFun_APDS9960.h>
 
-// Global Variables
 SparkFun_APDS9960 apds = SparkFun_APDS9960();
 volatile bool isr_flag = 0;
 
-//Interrupt callback function in IRAM
 void ICACHE_RAM_ATTR interruptRoutine ();
 
+bool sensor_enabled = false;
+
 #include <BleKeyboard.h>
-BleKeyboard bleKeyboard;
-
-void interruptRoutine() {
-  isr_flag = 1;
-}
-
-void startInterrupt() {
-  attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
-}
-
-void stopInterrupt() {
-  detachInterrupt(APDS9960_INT);
-}
-
-void pageBack() {
-  if (bleKeyboard.isConnected()) {
-    bleKeyboard.write(KEY_LEFT_ARROW);
-  }
-  pixels.setPixelColor(0, pixels.Color(255, 0, 0));
-  pixels.show();
-  delay(10);
-  pixels.setPixelColor(0, 0);
-  pixels.show();
-}
-
-void pageForward() {
-  if (bleKeyboard.isConnected()) {
-    bleKeyboard.write(KEY_RIGHT_ARROW);
-  }
-  pixels.setPixelColor(0, pixels.Color(0, 0, 255));
-  pixels.show();
-  delay(10);
-  pixels.setPixelColor(0, 0);
-  pixels.show();
-}
-
-void handleGesture() {
-  if ( apds.isGestureAvailable() ) {
-    print(F("Gesture: "));
-    switch ( apds.readGesture() ) {
-      case DIR_UP:
-        println(F("UP"));
-        break;
-      case DIR_DOWN:
-        println(F("DOWN"));
-        break;
-      case DIR_LEFT:
-        println(F("LEFT"));
-        pageBack();
-        break;
-      case DIR_RIGHT:
-        println(F("RIGHT"));
-        pageForward();
-        break;
-      case DIR_NEAR:
-        println(F("NEAR"));
-        break;
-      case DIR_FAR:
-        println(F("FAR"));
-        break;
-      default:
-        println(F("NONE"));
-    }
-  }
-}
+BleKeyboard bleKeyboard("Page Turner");
 
 void setup() {
   #ifdef DEBUG_PRINT
@@ -182,4 +116,68 @@ void loop() {
     isr_flag = 0;
     startInterrupt();
   }
+}
+
+void startInterrupt() {
+  attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
+}
+
+void stopInterrupt() {
+  detachInterrupt(APDS9960_INT);
+}
+
+void handleGesture() {
+  if ( apds.isGestureAvailable() ) {
+    print(F("Gesture: "));
+    switch ( apds.readGesture() ) {
+      case DIR_UP:
+        println(F("UP"));
+        break;
+      case DIR_DOWN:
+        println(F("DOWN"));
+        break;
+      case DIR_LEFT:
+        println(F("LEFT"));
+        pageBack();
+        break;
+      case DIR_RIGHT:
+        println(F("RIGHT"));
+        pageForward();
+        break;
+      case DIR_NEAR:
+        println(F("NEAR"));
+        break;
+      case DIR_FAR:
+        println(F("FAR"));
+        break;
+      default:
+        println(F("NONE"));
+    }
+  }
+}
+
+void pageBack() {
+  if (bleKeyboard.isConnected()) {
+    bleKeyboard.write(KEY_LEFT_ARROW);
+  }
+  pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+  pixels.show();
+  delay(10);
+  pixels.setPixelColor(0, 0);
+  pixels.show();
+}
+
+void pageForward() {
+  if (bleKeyboard.isConnected()) {
+    bleKeyboard.write(KEY_RIGHT_ARROW);
+  }
+  pixels.setPixelColor(0, pixels.Color(0, 0, 255));
+  pixels.show();
+  delay(10);
+  pixels.setPixelColor(0, 0);
+  pixels.show();
+}
+
+void interruptRoutine() {
+  isr_flag = 1;
 }
