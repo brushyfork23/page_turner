@@ -11,4 +11,4 @@ The code ([page_turner.ino](page_turner.ino)) is uploaded to an [Adafruit QT Py 
 -   [Adafruit_NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel/tree/f01f618b0671fc8a5437eb6e47184bea74f1be60)
 -   [T-vK/ESP32-BLE-Keyboard](https://github.com/T-vK/ESP32-BLE-Keyboard/tree/b7aaf9bb711a04216e4417f1e2a6b0ee0eaeaf66)
 -   [Dgemily/APDS-9960_Gesture_Sensor_esp8266_Library](https://github.com/Dgemily/APDS-9960_Gesture_Sensor_esp8266_Library/tree/ace7afaba07e7df73d7fd7199d35698608a5d69b)  
-    I used a fork of SparkFun's APDS-9960 sensor library because the SparkFun library directly calls Wire.begin() but I'm using hte QT Py's JST SH port which does not use the default Wire pins. I also like Dgemily's suggestion of using interrupt callback functions in IRAM.
+    I used a fork of SparkFun's APDS-9960 sensor library because the SparkFun library directly calls Wire.begin() but I'm using the QT Py's JST SH port which does not use the default Wire pins. I also like Dgemily's suggestion of using interrupt callback functions in IRAM.
