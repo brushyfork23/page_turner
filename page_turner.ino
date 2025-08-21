@@ -1,15 +1,8 @@
 #define APDS9960_INT 8
 #define APDS9960_SDA 41
 #define APDS9960_SCL 40
-#define PROX_INT_HIGH 150
-#define PROX_INT_LOW 0
-// #define DEBUG_PRINT
-// When GESTURE_SENSING is defined, left and right gestures
-// will send left and right arrow key commands. When not
-// defined, proximity detection will be used instead and
-// only right arrow key commands will be sent.
-// #define GESTURE_SENSING
-//  #define DEBUG_SENSOR
+#define DEBUG_PRINT
+#define DEBUG_SENSOR
 
 #include <Arduino.h>
 
@@ -43,7 +36,7 @@ SparkFun_APDS9960 apds = SparkFun_APDS9960();
 uint8_t proximity_data = 0;
 volatile bool isr_flag = 0;
 
-void ICACHE_RAM_ATTR interruptRoutine ();
+void ICACHE_RAM_ATTR interruptRoutine();
 
 bool sensor_enabled = false;
 
@@ -71,25 +64,13 @@ void setup() {
 
   pinMode(APDS9960_INT, INPUT_PULLUP);
 
+  attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
+
   if ( apds.init() ) {
     println(F("APDS-9960 initialization complete"));
   } else {
     println(F("Something went wrong during APDS-9960 init!"));
   }
-
-  #ifndef GESTURE_SENSING
-  // Adjust the Proximity sensor gain
-  if ( !apds.setProximityGain(PGAIN_2X) ) {
-    println(F("Something went wrong trying to set PGAIN"));
-  }
-  // Set proximity interrupt thresholds
-  if ( !apds.setProximityIntLowThreshold(PROX_INT_LOW) ) {
-    println(F("Error writing low threshold"));
-  }
-  if ( !apds.setProximityIntHighThreshold(PROX_INT_HIGH) ) {
-    println(F("Error writing high threshold"));
-  }
-  #endif
 
   bleKeyboard.begin();
 }
@@ -114,25 +95,16 @@ void loop() {
       }
       digitalWrite(NEOPIXEL_POWER, LOW);
       startInterrupt();
-      #ifdef GESTURE_SENSING
-      if (!apds.enableGestureSensor(true)) {
-        println(F("Something went wrong during gesture sensor init!"));
-      } else {
-        println(F("Gesture sensor initialized"));
-      }
-      #else
       if ( apds.enableProximitySensor(true) ) {
         println(F("Proximity sensor is now running"));
       } else {
         println(F("Something went wrong during sensor init!"));
       }
-      #endif
     }
 
   } else {
     if (sensor_enabled) {
       sensor_enabled = false;
-      stopInterrupt();
       apds.disablePower();
       println(F("Sensor disabled"));
       digitalWrite(NEOPIXEL_POWER, HIGH);
@@ -151,56 +123,11 @@ void loop() {
   }
 
   if( isr_flag == 1 ) {
-    stopInterrupt();
-    #ifdef GESTURE_SENSING
-    handleGesture();
-    #else
     handleProximity();
-    #endif
     isr_flag = 0;
-    startInterrupt();
   }
 }
 
-void startInterrupt() {
-  attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
-}
-
-void stopInterrupt() {
-  detachInterrupt(APDS9960_INT);
-}
-
-#ifdef GESTURE_SENSING
-void handleGesture() {
-  if ( apds.isGestureAvailable() ) {
-    print(F("Gesture: "));
-    switch ( apds.readGesture() ) {
-      case DIR_UP:
-        println(F("UP"));
-        break;
-      case DIR_DOWN:
-        println(F("DOWN"));
-        break;
-      case DIR_LEFT:
-        println(F("LEFT"));
-        pageBack();
-        break;
-      case DIR_RIGHT:
-        println(F("RIGHT"));
-        pageForward();
-        break;
-      case DIR_NEAR:
-        println(F("NEAR"));
-        break;
-      case DIR_FAR:
-        println(F("FAR"));
-        break;
-      default:
-        println(F("NONE"));
-    }
-  }
-}
-#else
 void handleProximity() {
     if ( !apds.readProximity(proximity_data) ) {
       println(F("Error reading proximity value"));
@@ -219,18 +146,6 @@ void handleProximity() {
       println(F("Error clearing interrupt"));
     }
 }
-#endif
-
-#ifdef GESTURE_SENSING
-void pageBack() {
-  if (bleKeyboard.isConnected() && !recentlyWritten()) {
-    bleKeyboard.write(KEY_LEFT_ARROW);
-  }
-  if (bleKeyboard.isConnected()) {
-    bleKeyboard.write(KEY_LEFT_ARROW);
-  }
-}
-#endif
 
 void pageForward() {
   if (bleKeyboard.isConnected() && !recentlyWritten()) {
