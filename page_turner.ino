@@ -1,12 +1,11 @@
 #define APDS9960_INT 8
 #define APDS9960_SDA 41
 #define APDS9960_SCL 40
-#define DEBUG_PRINT
-#define DEBUG_SENSOR
+#define PROX_THRESHOLD 10
+// #define DEBUG_PRINT
+// #define DEBUG_SENSOR
 
 #include <Arduino.h>
-
-unsigned long lastWriteTime = 0;
 
 void print(const __FlashStringHelper *ifsh) {
   #ifdef DEBUG_PRINT
@@ -30,15 +29,15 @@ void println(uint8_t num) {
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
 #include <Wire.h>
-#include <SparkFun_APDS9960.h>
+#include "Adafruit_APDS9960.h"
 
-SparkFun_APDS9960 apds = SparkFun_APDS9960();
-uint8_t proximity_data = 0;
-volatile bool isr_flag = 0;
-
-void ICACHE_RAM_ATTR interruptRoutine();
+Adafruit_APDS9960 apds;
 
 bool sensor_enabled = false;
+unsigned long lastWriteTime = 0;
+
+unsigned long forwardIndicatorOnTime = 0;
+bool forwardIndicatorOn = false;
 
 #include <BleKeyboard.h>
 BleKeyboard bleKeyboard("Page Turner");
@@ -64,13 +63,16 @@ void setup() {
 
   pinMode(APDS9960_INT, INPUT_PULLUP);
 
-  attachInterrupt(APDS9960_INT, interruptRoutine, FALLING);
-
-  if ( apds.init() ) {
+  if ( apds.begin() ) {
     println(F("APDS-9960 initialization complete"));
   } else {
     println(F("Something went wrong during APDS-9960 init!"));
   }
+
+  apds.setProxGain(APDS9960_PGAIN_2X);
+  apds.enableProximity(true);
+  apds.setProximityInterruptThreshold(0, PROX_THRESHOLD);
+  apds.enableProximityInterrupt();
 
   bleKeyboard.begin();
 }
@@ -81,6 +83,14 @@ void loop() {
   #else
   bool debug_gesture = false;
   #endif
+
+
+  unsigned long currentTime = millis();
+  if (forwardIndicatorOn && currentTime - forwardIndicatorOnTime >= 400) {
+    pixels.setPixelColor(0, 0);
+    pixels.show();
+    forwardIndicatorOn = false;
+  }
 
   if (bleKeyboard.isConnected() || debug_gesture) {
     if (!sensor_enabled) {
@@ -93,25 +103,19 @@ void loop() {
         pixels.show();
         delay(110);
       }
-      digitalWrite(NEOPIXEL_POWER, LOW);
-      startInterrupt();
-      if ( apds.enableProximitySensor(true) ) {
-        println(F("Proximity sensor is now running"));
-      } else {
-        println(F("Something went wrong during sensor init!"));
-      }
+      apds.enable(true);
+      apds.clearInterrupt();
+      println(F("Sensor enabled"));
     }
 
   } else {
     if (sensor_enabled) {
       sensor_enabled = false;
-      apds.disablePower();
+      apds.enable(false);
       println(F("Sensor disabled"));
-      digitalWrite(NEOPIXEL_POWER, HIGH);
     }
 
     static unsigned long lastBlinkTime = 0;
-    unsigned long currentTime = millis();
     if (currentTime - lastBlinkTime >= 5000) {
       lastBlinkTime = currentTime;
       pixels.setPixelColor(0, pixels.Color(255, 0, 0));
@@ -122,38 +126,37 @@ void loop() {
     }
   }
 
-  if( isr_flag == 1 ) {
+  if( sensor_enabled && !digitalRead(APDS9960_INT) ) {
     handleProximity();
-    isr_flag = 0;
+    apds.clearInterrupt();
   }
 }
 
 void handleProximity() {
-    if ( !apds.readProximity(proximity_data) ) {
-      println(F("Error reading proximity value"));
-    }
-    
     static unsigned long lastDetectTime = 0;
     unsigned long currentTime = millis();
     if (currentTime - lastDetectTime >= 50) {
+      #ifdef DEBUG_PRINT
+      uint8_t proximity = apds.readProximity();
       print(F("Proximity detected! "));
-      println(proximity_data);
+      println(proximity);
+      #endif
       pageForward();
     }
     lastDetectTime = currentTime;
-
-    if ( !apds.clearProximityInt() ) {
-      println(F("Error clearing interrupt"));
-    }
 }
 
 void pageForward() {
-  if (bleKeyboard.isConnected() && !recentlyWritten()) {
-    bleKeyboard.write(KEY_RIGHT_ARROW);
-  }
+  // if (bleKeyboard.isConnected() && !recentlyWritten()) {
+  //   bleKeyboard.write(KEY_RIGHT_ARROW);
+  // }
   if (bleKeyboard.isConnected()) {
-    bleKeyboard.write(KEY_RIGHT_ARROW);
+    bleKeyboard.write(0x20);
   }
+  pixels.setPixelColor(0, pixels.Color(0, 125, 0));
+  pixels.show();
+  forwardIndicatorOnTime = millis();
+  forwardIndicatorOn = true;
 }
 
 bool recentlyWritten() {
@@ -163,8 +166,4 @@ bool recentlyWritten() {
     return false;
   }
   return true;
-}
-
-void interruptRoutine() {
-  isr_flag = 1;
 }
