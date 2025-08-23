@@ -2,6 +2,8 @@
 #define APDS9960_SDA 41
 #define APDS9960_SCL 40
 #define PROX_THRESHOLD 10
+#define BATTERY_PIN A2
+#define BATTERY_SAMPLES 16
 // #define DEBUG_PRINT
 // #define DEBUG_SENSOR
 
@@ -25,6 +27,12 @@ void println(uint8_t num) {
   #endif
 }
 
+void println(float num) {
+  #ifdef DEBUG_PRINT
+  Serial.print(num);
+  #endif
+}
+
 #include <Adafruit_NeoPixel.h>
 Adafruit_NeoPixel pixels(1, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
 
@@ -42,10 +50,44 @@ bool forwardIndicatorOn = false;
 #include <BleKeyboard.h>
 BleKeyboard bleKeyboard("Page Turner");
 
+float batteryVoltage = 0;
+
+float readBatteryVoltage() {
+    uint32_t millivolts = 0;
+    
+    for (int i = 0; i < BATTERY_SAMPLES; i++) {
+        millivolts += analogReadMilliVolts(BATTERY_PIN);
+        delayMicroseconds(100);
+    }
+    
+    float avgMillivolts = millivolts / (float)BATTERY_SAMPLES;
+    batteryVoltage = (avgMillivolts / 1000.0) * 2.0;
+    print(F("Battery voltage: "));
+    println(batteryVoltage);
+    return batteryVoltage;
+}
+
+uint32_t getBatteryStatusColor() {
+    print(F("Battery status: "));
+    if (batteryVoltage > 4.0) {
+      println(F("Charging/USB"));
+      return pixels.Color(0, 255, 0);
+    } else if (batteryVoltage > 3.7) {
+      println(F("Good"));
+      return pixels.Color(0, 255, 0);
+    } else if (batteryVoltage > 3.6) {
+      println(F("Low"));
+      return pixels.Color(255, 200, 0);
+    } else {
+      println(F("Critical"));
+      return pixels.Color(255, 0, 0);
+    }
+}
+
 void setup() {
   #ifdef DEBUG_PRINT
   Serial.begin(115200);
-  delay(1500);
+  delay(50);
   Serial.println();
   Serial.println(F("-----------"));
   Serial.println(F("Page Turner"));
@@ -58,6 +100,16 @@ void setup() {
   #endif
   pixels.begin();
   pixels.setBrightness(20);
+
+  // Configure ADC settings for optimal battery monitoring
+  analogSetAttenuation(ADC_11db);    // 0-3100mV range
+  analogReadResolution(12);          // 12-bit resolution
+  readBatteryVoltage();
+  pixels.setPixelColor(0, getBatteryStatusColor());
+  pixels.show();
+  delay(1000);
+  pixels.setPixelColor(0,0);
+  pixels.show();
 
   Wire.begin(APDS9960_SDA,APDS9960_SCL);
 
@@ -116,11 +168,11 @@ void loop() {
     }
 
     static unsigned long lastBlinkTime = 0;
-    if (currentTime - lastBlinkTime >= 5000) {
+    if (currentTime - lastBlinkTime >= 2000) {
       lastBlinkTime = currentTime;
       pixels.setPixelColor(0, pixels.Color(255, 0, 0));
       pixels.show();
-      delay(10);
+      delay(20);
       pixels.setPixelColor(0, 0);
       pixels.show();
     }
